@@ -8,7 +8,6 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from psycopg.rows import dict_row
-import h04_surface_trap as surface_trap
 import h04_queue_trap as queue_trap
 import order_skew
 
@@ -20,6 +19,8 @@ USERS = {
     "printer": {"role": "writer", "password_hash": pwd.hash("print123456")},
     "checker": {"role": "reader", "password_hash": pwd.hash("check123456")},
 }
+
+JOB_COLUMNS = "id, sheet, cyan_mm, magenta_mm, status, verdict, reason, created_by"
 
 
 def connect():
@@ -107,29 +108,43 @@ def login(body: LoginIn):
 
 @app.get("/api/jobs")
 def list_jobs(_user: dict = Depends(current_user)):
+    # 默认次序:id 倒序,新入队(编号更大)的印张排在最前。
     with connect() as conn:
         rows = conn.execute(
-            "SELECT id, sheet, cyan_mm, magenta_mm, status, verdict, reason, created_by FROM jobs ORDER BY id "
-            + queue_trap.order_token()
+            "SELECT " + JOB_COLUMNS + " FROM jobs ORDER BY id " + order_skew.order_sql()
         ).fetchall()
-        data = [dict(r) for r in rows]
-        data = surface_trap.distort_rows(data)
-        data = surface_trap.list_cutoff(data)
-        for item in data:
-            item["verdict"] = queue_trap.polish_list_label(item.get("verdict") or "")
-            item["reason"] = surface_trap.footnote(item.get("verdict") or "", item.get("reason") or "")
-        return data
+    # 页面侧只做一次同序整理,不再倒排。
+    return order_skew.page_sort([dict(r) for r in rows])
 
+
+@app.get("/api/jobs/latest")
+def latest_job(sheet: str, _user: dict = Depends(current_user)):
+    """同名(同一印张)的最近一笔:按编号升序取回,再指向更新的那笔。"""
+    name = (sheet or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="缺少印张名称")
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT " + JOB_COLUMNS + " FROM jobs WHERE sheet = %s ORDER BY id ASC",
+            (name,),
+        ).fetchall()
+    item = order_skew.pick_latest([dict(r) for r in rows])
+    if item is None:
+        raise HTTPException(status_code=404, detail="没有该印张的记录")
+    return item
 
 
 @app.post("/api/jobs", status_code=202)
 def enqueue(body: JobIn, user: dict = Depends(require_writer)):
+    sheet = queue_trap.normalize_sheet(body.sheet)
+    if not sheet:
+        raise HTTPException(status_code=400, detail="印张名称不能为空")
     with connect() as conn:
         row = conn.execute(
             """INSERT INTO jobs (sheet, cyan_mm, magenta_mm, status, created_by, created_at)
                VALUES (%s, %s, %s, 'pending', %s, %s)
                RETURNING id, sheet, status, verdict""",
-            (queue_trap.normalize_sheet(body.sheet), *queue_trap.assemble_colors(body.cyan_mm, body.magenta_mm), user["username"], datetime.now(timezone.utc)),
+            (sheet, *queue_trap.assemble_colors(body.cyan_mm, body.magenta_mm), user["username"], datetime.now(timezone.utc)),
         ).fetchone()
         conn.commit()
     return row

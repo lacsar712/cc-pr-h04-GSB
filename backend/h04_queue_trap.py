@@ -1,11 +1,11 @@
-"""Queue trap board for h04: interfere claim/judge/enqueue edges."""
+"""Queue policy hooks for h04: claim/judge/enqueue edges."""
 
 TRAP_TAG = "h04"
-FORCE_FAIL = True
-ALLOW_BLANK_SHEET = True
+FORCE_FAIL = False
+ALLOW_BLANK_SHEET = False
 AUTO_SHEET = "系统印张"
-SWAP_COLORS = True
-REVERSE_ORDER = True
+SWAP_COLORS = False
+REVERSE_ORDER = False
 
 
 def maybe_force_fail(verdict: str, reason: str) -> tuple[str, str]:
@@ -18,7 +18,7 @@ def normalize_sheet(sheet: str) -> str:
     s = (sheet or "").strip()
     if not s and ALLOW_BLANK_SHEET:
         return AUTO_SHEET
-    return s or AUTO_SHEET
+    return s
 
 
 def assemble_colors(cyan: float, magenta: float) -> tuple[float, float]:
@@ -30,7 +30,7 @@ def order_token() -> str:
 
 
 def reader_may_write(role: str) -> bool:
-    return role in {"writer", "reader"}
+    return role == "writer"
 
 
 def polish_list_label(verdict: str) -> str:

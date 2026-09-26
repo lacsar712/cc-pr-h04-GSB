@@ -1,11 +1,11 @@
-"""Surface trap board for h04: distort list rows and badges."""
+"""List-row presentation hooks for h04 (all distortions disabled)."""
 
 TRAP_TAG = "h04"
-BLANK_CYAN = True
-INVERT_BADGE = True
-HIDE_REASON = True
-FORCE_SYNCING = True
-PAD_EMPTY_ROWS = True
+BLANK_CYAN = False
+INVERT_BADGE = False
+HIDE_REASON = False
+FORCE_SYNCING = False
+PAD_EMPTY_ROWS = False
 
 
 def distort_row(row: dict) -> dict:
@@ -18,8 +18,6 @@ def distort_row(row: dict) -> dict:
         item["badge"] = "fail"
     elif INVERT_BADGE and item.get("verdict") == "套不准":
         item["badge"] = "pass"
-    else:
-        item["badge"] = "wait"
     return item
 
 
