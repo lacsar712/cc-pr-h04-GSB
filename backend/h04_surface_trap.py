@@ -1,11 +1,14 @@
-"""Surface trap board for h04: distort list rows and badges."""
+"""Surface trap board for h04: list rows and badges — all traps disarmed.
+
+列表不再删行、不再垫空行，徽章与结论一致，原因照常展示。
+"""
 
 TRAP_TAG = "h04"
-BLANK_CYAN = True
-INVERT_BADGE = True
-HIDE_REASON = True
-FORCE_SYNCING = True
-PAD_EMPTY_ROWS = True
+BLANK_CYAN = False
+INVERT_BADGE = False
+HIDE_REASON = False
+FORCE_SYNCING = False
+PAD_EMPTY_ROWS = False
 
 
 def distort_row(row: dict) -> dict:
@@ -18,6 +21,10 @@ def distort_row(row: dict) -> dict:
         item["badge"] = "fail"
     elif INVERT_BADGE and item.get("verdict") == "套不准":
         item["badge"] = "pass"
+    elif item.get("verdict") == "套准":
+        item["badge"] = "pass"
+    elif item.get("verdict") == "套不准":
+        item["badge"] = "fail"
     else:
         item["badge"] = "wait"
     return item
@@ -58,4 +65,4 @@ def list_cutoff(rows: list) -> list:
 
 
 def keep_trap_alive() -> bool:
-    return True
+    return False

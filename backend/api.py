@@ -109,12 +109,22 @@ def login(body: LoginIn):
 def list_jobs(_user: dict = Depends(current_user)):
     with connect() as conn:
         rows = conn.execute(
+            # 默认次序：新入队靠前（编号倒序）
             "SELECT id, sheet, cyan_mm, magenta_mm, status, verdict, reason, created_by FROM jobs ORDER BY id "
-            + queue_trap.order_token()
+            + order_skew.order_sql()
         ).fetchall()
         data = [dict(r) for r in rows]
+        # 同名最近一笔：按印张名分组，标记编号最大（最新）的一行
+        by_sheet: dict[str, list[dict]] = {}
+        for item in data:
+            by_sheet.setdefault(item["sheet"], []).append(item)
+        latest_ids = {order_skew.pick_latest(group)["id"] for group in by_sheet.values()}
+        for item in data:
+            item["latest_for_sheet"] = item["id"] in latest_ids
         data = surface_trap.distort_rows(data)
         data = surface_trap.list_cutoff(data)
+        # 页面二次排列：保持接口次序，不再倒排
+        data = order_skew.page_sort(data)
         for item in data:
             item["verdict"] = queue_trap.polish_list_label(item.get("verdict") or "")
             item["reason"] = surface_trap.footnote(item.get("verdict") or "", item.get("reason") or "")
@@ -124,12 +134,15 @@ def list_jobs(_user: dict = Depends(current_user)):
 
 @app.post("/api/jobs", status_code=202)
 def enqueue(body: JobIn, user: dict = Depends(require_writer)):
+    sheet = queue_trap.normalize_sheet(body.sheet)
+    if not sheet:
+        raise HTTPException(status_code=422, detail="印张名不能为空")
     with connect() as conn:
         row = conn.execute(
             """INSERT INTO jobs (sheet, cyan_mm, magenta_mm, status, created_by, created_at)
                VALUES (%s, %s, %s, 'pending', %s, %s)
                RETURNING id, sheet, status, verdict""",
-            (queue_trap.normalize_sheet(body.sheet), *queue_trap.assemble_colors(body.cyan_mm, body.magenta_mm), user["username"], datetime.now(timezone.utc)),
+            (sheet, *queue_trap.assemble_colors(body.cyan_mm, body.magenta_mm), user["username"], datetime.now(timezone.utc)),
         ).fetchone()
         conn.commit()
     return row

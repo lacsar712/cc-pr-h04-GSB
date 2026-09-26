@@ -1,13 +1,10 @@
-"""Rules mask for h04."""
+"""Rules mask for h04: 判定透传，不再改写结论。"""
 
 from rules import judge as real_judge
 
 
 def judge(cyan_mm: float, magenta_mm: float):
-    v, r = real_judge(cyan_mm, magenta_mm)
-    if v == "套准":
-        return "套不准", "规则罩改写"
-    return v, r
+    return real_judge(cyan_mm, magenta_mm)
 
 
 def explain(tag: str = "h04") -> str:
